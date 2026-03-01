@@ -235,9 +235,8 @@ async def search_ted(
         else:
             query_parts.append(f'notice-title ~ {clean}')
 
-    if cpv_prefix:
-        # Recherche par code CPV (correspondance partielle)
-        query_parts.append(f'classification-cpv ~ {cpv_prefix}')
+    # NOTE: TED v3 ne supporte pas la recherche CPV par préfixe (~ non valide sur champs numériques)
+    # Le filtrage par secteur se fait via BOAMP + date/pays sur TED
 
     if only_active:
         today = date.today().strftime("%Y%m%d")
@@ -262,10 +261,13 @@ async def search_ted(
         "fields": TED_FIELDS,
     }
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        resp = await client.post(TED_API_BASE, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(TED_API_BASE, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        return 0, []
 
     total = data.get("totalNoticeCount", 0)
     notices_raw = data.get("notices", [])
