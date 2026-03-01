@@ -225,7 +225,7 @@ async def search_boamp(
         where_clauses.append(f'search(objet, "{safe_q}")')
 
     if cpv_prefix:
-        where_clauses.append(f'cpv like "{cpv_prefix}%"')
+        where_clauses.append(f'dc like "{cpv_prefix}%"')
 
     if only_active:
         today = date.today().isoformat()
