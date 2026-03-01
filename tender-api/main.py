@@ -34,7 +34,7 @@ with structured extraction of key fields:
 
 ### Data Sources
 | Source | Coverage | Update Frequency |
-|--------|----------|-----------------|
+|--------|----------|-----------------| 
 | **BOAMP** | France national | 2× / day |
 | **TED** | All EU Member States | Daily |
 
@@ -115,12 +115,18 @@ async def health_check():
     except Exception:
         sources_status["boamp"] = "unreachable"
 
-    # Check TED
+    # Check TED (v3 : fields obligatoire, language supprimé)
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.post(
                 "https://api.ted.europa.eu/v3/notices/search",
-                json={"query": "*", "page": 1, "limit": 1},
+                json={
+                    "query": "publication-date >= 20260101",
+                    "page": 1,
+                    "limit": 1,
+                    "scope": "ALL",
+                    "fields": ["notice-identifier", "publication-date"],
+                },
             )
             sources_status["ted"] = "ok" if r.status_code == 200 else f"error_{r.status_code}"
     except Exception:
