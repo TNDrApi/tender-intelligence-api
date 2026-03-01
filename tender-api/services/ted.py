@@ -129,9 +129,9 @@ def normalize_ted_record(notice: Dict[str, Any]) -> NoticeModel:
     )
 
     # ── Acheteur ──────────────────────────────────────────────────────────────
-    buyer_name = _first(notice.get("buyer-name")) or None
-    buyer_city = _first(notice.get("buyer-city")) or None
-    buyer_country_raw = _first(notice.get("buyer-country")) or "EU"
+    buyer_name = _pick_lang(notice.get("buyer-name")) or None
+    buyer_city = _pick_lang(notice.get("buyer-city")) or None
+    buyer_country_raw = _pick_lang(notice.get("buyer-country")) or _first(notice.get("buyer-country")) or "EU"
     # TED retourne des codes 3 lettres (IRL, FRA…) — on garde tel quel
     buyer = BuyerModel(name=buyer_name, city=buyer_city, country=buyer_country_raw)
 
