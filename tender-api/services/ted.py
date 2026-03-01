@@ -1,18 +1,4 @@
-"""
-TED (Tenders Electronic Daily) API client — European public procurement.
-Uses the official TED API v3 — free, no API key required for search.
-Base URL: https://api.ted.europa.eu/v3
-
-Official docs: https://docs.ted.europa.eu/api/latest/index.html
-"""
-import httpx
-import re
-from datetime import datetime, date
-from typing import Optional, List, Dict, Any
-from models.notice import NoticeModel, BuyerModel
-from services.boamp import cpv_to_sector, days_until
-
-"""
+""
 TED (Tenders Electronic Daily) API client - European public procurement.
 Uses the official TED API v3 - free, no API key required for search.
 Base URL: https://api.ted.europa.eu/v3
