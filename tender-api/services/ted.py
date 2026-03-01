@@ -1,4 +1,4 @@
-""
+"" 
 TED (Tenders Electronic Daily) API client - European public procurement.
 Uses the official TED API v3 - free, no API key required for search.
 Base URL: https://api.ted.europa.eu/v3
