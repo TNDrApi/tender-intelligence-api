@@ -283,18 +283,24 @@ async def search_ted(
 async def get_ted_notice(notice_id: str) -> Optional[NoticeModel]:
     """Récupère un avis TED par son numéro de publication."""
     payload = {
-        "query": f'publication-number = {notice_id}',
+        "query": f'notice-identifier = {notice_id}',
         "page": 1,
         "limit": 1,
         "scope": "ALL",
         "fields": TED_FIELDS,
     }
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(TED_API_BASE, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(TED_API_BASE, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        return None
 
     notices_raw = data.get("notices", [])
     if not notices_raw:
         return None
-    return normalize_ted_record(notices_raw[0])
+    try:
+        return normalize_ted_record(notices_raw[0])
+    except Exception:
+        return None
