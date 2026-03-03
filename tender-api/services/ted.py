@@ -236,20 +236,19 @@ async def search_ted(
         else:
             query_parts.append(f'notice-title ~ {clean}')
 
-    # CPV filter: supporte un ou plusieurs préfixes via OR de plages numériques
+    # CPV filter: TED supporte IN (max 3 valeurs) mais pas les ranges (>=/<= → 400)
+    # On utilise le code CPV principal de chaque préfixe (prefix * 1_000_000)
     all_cpv = cpv_prefixes or ([cpv_prefix] if cpv_prefix else [])
     if all_cpv:
-        range_parts = []
+        cpv_codes_in = []
         for p in all_cpv:
             try:
-                low = int(p) * 1_000_000
-                high = low + 999_999
-                range_parts.append(f'(classification-cpv >= {low} AND classification-cpv <= {high})')
+                cpv_codes_in.append(str(int(p) * 1_000_000))
             except (ValueError, TypeError):
                 pass
-        if range_parts:
-            combined = range_parts[0] if len(range_parts) == 1 else '(' + ' OR '.join(range_parts) + ')'
-            query_parts.append(combined)
+        if cpv_codes_in:
+            in_list = ', '.join(cpv_codes_in[:3])  # max 3 valeurs acceptées par TED
+            query_parts.append(f'classification-cpv IN ({in_list})')
 
     if only_active:
         today = date.today().strftime("%Y%m%d")
