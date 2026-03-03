@@ -6,6 +6,7 @@ Base URL: https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datas
 Official docs: https://www.boamp.fr/pages/donnees-ouvertes-et-api/
 """
 import httpx
+import json
 import re
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
@@ -84,7 +85,7 @@ def parse_budget(fields: Dict[str, Any]) -> tuple[Optional[float], Optional[floa
 
     # Try to extract from text
     objet = fields.get("objet", "") or ""
-    matches = re.findall(r"(\d[\d\s]*(?:[,\.]\d+)?)\s*(?:€|EUR|euros?)", objet, re.IGNORECASE)
+    matches = re.findall(r"(\d[\d\s]*(?:[,\.]+\d+)?)\s*(?:€|EUR|euros?)", objet, re.IGNORECASE)
     if matches:
         try:
             val = float(matches[0].replace(" ", "").replace(",", "."))
@@ -106,6 +107,16 @@ def days_until(deadline_str: Optional[str]) -> Optional[int]:
         return None
 
 
+def _parse_donnees(donnees_str: Optional[str]) -> Dict[str, Any]:
+    """Parse the 'donnees' JSON string from BOAMP v2.1 records."""
+    if not donnees_str or not isinstance(donnees_str, str):
+        return {}
+    try:
+        return json.loads(donnees_str)
+    except Exception:
+        return {}
+
+
 def normalize_boamp_record(record: Dict[str, Any]) -> NoticeModel:
     """Convert a raw BOAMP API record into a normalized NoticeModel."""
     fields = record.get("fields", {}) or {}
@@ -117,18 +128,30 @@ def normalize_boamp_record(record: Dict[str, Any]) -> NoticeModel:
     # Title
     title = fields.get("objet") or fields.get("libelle") or "Sans titre"
 
-    # Buyer
-    acheteur = fields.get("acheteur") or {}
-    if isinstance(acheteur, str):
-        buyer = BuyerModel(name=acheteur)
-    elif isinstance(acheteur, dict):
-        buyer = BuyerModel(
-            name=acheteur.get("denomination") or acheteur.get("nom") or acheteur.get("name"),
-            city=acheteur.get("ville") or acheteur.get("city"),
-            country="FR"
-        )
-    else:
-        buyer = BuyerModel(name=fields.get("nom_acheteur"))
+    # --- Buyer ---
+    # BOAMP v2.1: buyer name is in top-level "nomacheteur" field
+    # City is nested in "donnees" JSON: FNSimple.organisme.ville
+    buyer_name = fields.get("nomacheteur") or None
+    buyer_city = None
+
+    # Parse "donnees" JSON string for richer organisme data
+    donnees = _parse_donnees(fields.get("donnees"))
+    organisme = donnees.get("FNSimple", {}).get("organisme", {})
+
+    if not buyer_name:
+        buyer_name = organisme.get("nomOfficiel") or None
+
+    buyer_city = (
+        organisme.get("ville")
+        or organisme.get("communeGeographique")
+        or None
+    )
+
+    buyer = BuyerModel(
+        name=buyer_name,
+        city=buyer_city,
+        country="FR",
+    )
 
     # Dates
     pub_date = fields.get("dateparution") or fields.get("date_parution")
@@ -137,8 +160,27 @@ def normalize_boamp_record(record: Dict[str, Any]) -> NoticeModel:
     # Budget
     bmin, bmax, bdisplay = parse_budget(fields)
 
-    # CPV
-    cpv_raw = fields.get("cpv") or fields.get("codeCPV") or ""
+    # --- CPV codes ---
+    # BOAMP v2.1: CPV codes are in the "dc" top-level field (list of strings)
+    cpv_raw = fields.get("dc") or fields.get("cpv") or fields.get("codeCPV") or ""
+
+    # Also try from donnees: FNSimple.initial.natureMarche.codeCPV.objetPrincipal.classPrincipale
+    if not cpv_raw:
+        try:
+            cpv_nest = (
+                donnees
+                .get("FNSimple", {})
+                .get("initial", {})
+                .get("natureMarche", {})
+                .get("codeCPV", {})
+                .get("objetPrincipal", {})
+                .get("classPrincipale")
+            )
+            if cpv_nest:
+                cpv_raw = [str(cpv_nest)]
+        except Exception:
+            pass
+
     if isinstance(cpv_raw, list):
         cpv_codes = [str(c).strip() for c in cpv_raw if c]
     elif cpv_raw:
@@ -161,8 +203,20 @@ def normalize_boamp_record(record: Dict[str, Any]) -> NoticeModel:
             description_parts.append(val.strip())
     description = " | ".join(description_parts) if description_parts else None
 
-    # Duration
+    # Duration — check donnees if not in top-level fields
     duree_raw = fields.get("dureemois") or fields.get("duree_mois")
+    if not duree_raw:
+        try:
+            duree_raw = (
+                donnees
+                .get("FNSimple", {})
+                .get("initial", {})
+                .get("natureMarche", {})
+                .get("dureeMois")
+            )
+        except Exception:
+            pass
+
     duration_months = None
     if duree_raw:
         try:
@@ -225,6 +279,7 @@ async def search_boamp(
         where_clauses.append(f'search(objet, "{safe_q}")')
 
     if cpv_prefix:
+        # BOAMP v2.1: CPV field is "dc" (descripteur_code), not "cpv"
         where_clauses.append(f'dc like "{cpv_prefix}%"')
 
     if only_active:
@@ -245,7 +300,7 @@ async def search_boamp(
     notices = []
     for record in results:
         try:
-            # v2.1 API: fields are at top level, not nested
+            # v2.1 API: fields are at top level, not nested under "fields"
             if "fields" not in record:
                 record = {"fields": record, "recordid": record.get("idweb", "")}
             notices.append(normalize_boamp_record(record))
