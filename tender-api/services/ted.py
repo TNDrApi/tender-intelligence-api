@@ -235,8 +235,15 @@ async def search_ted(
         else:
             query_parts.append(f'notice-title ~ {clean}')
 
-    # NOTE: TED v3 ne supporte pas la recherche CPV par préfixe (~ non valide sur champs numériques)
-    # Le filtrage par secteur se fait via BOAMP + date/pays sur TED
+    if cpv_prefix:
+        # TED v3: classification-cpv est un champ numérique (entier 8 chiffres)
+        # Pour filtrer le préfixe "30", on utilise une plage: 30000000 <= cpv <= 30999999
+        try:
+            low = int(cpv_prefix) * 1_000_000
+            high = low + 999_999
+            query_parts.append(f'(classification-cpv >= {low} AND classification-cpv <= {high})')
+        except (ValueError, TypeError):
+            pass
 
     if only_active:
         today = date.today().strftime("%Y%m%d")
