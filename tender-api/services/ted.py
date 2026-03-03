@@ -216,6 +216,7 @@ def normalize_ted_record(notice: Dict[str, Any]) -> NoticeModel:
 async def search_ted(
     query: Optional[str] = None,
     cpv_prefix: Optional[str] = None,
+    cpv_prefixes: Optional[List[str]] = None,
     limit: int = 20,
     page: int = 1,
     only_active: bool = True,
@@ -235,15 +236,20 @@ async def search_ted(
         else:
             query_parts.append(f'notice-title ~ {clean}')
 
-    if cpv_prefix:
-        # TED v3: classification-cpv est un champ numérique (entier 8 chiffres)
-        # Pour filtrer le préfixe "30", on utilise une plage: 30000000 <= cpv <= 30999999
-        try:
-            low = int(cpv_prefix) * 1_000_000
-            high = low + 999_999
-            query_parts.append(f'(classification-cpv >= {low} AND classification-cpv <= {high})')
-        except (ValueError, TypeError):
-            pass
+    # CPV filter: supporte un ou plusieurs préfixes via OR de plages numériques
+    all_cpv = cpv_prefixes or ([cpv_prefix] if cpv_prefix else [])
+    if all_cpv:
+        range_parts = []
+        for p in all_cpv:
+            try:
+                low = int(p) * 1_000_000
+                high = low + 999_999
+                range_parts.append(f'(classification-cpv >= {low} AND classification-cpv <= {high})')
+            except (ValueError, TypeError):
+                pass
+        if range_parts:
+            combined = range_parts[0] if len(range_parts) == 1 else '(' + ' OR '.join(range_parts) + ')'
+            query_parts.append(combined)
 
     if only_active:
         today = date.today().strftime("%Y%m%d")
