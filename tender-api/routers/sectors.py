@@ -85,7 +85,8 @@ async def search_by_sector(
     cpv_prefixes = sector_info["cpv_prefixes"]
     offset = (page - 1) * per_page
 
-    # Use the first CPV prefix for simplicity (APIs typically support one filter at a time)
+    # BOAMP: utilise le premier préfixe CPV (filtre dc like)
+    # TED: passe tous les préfixes pour un filtre OR sur classification-cpv
     primary_cpv = cpv_prefixes[0]
 
     try:
@@ -95,13 +96,13 @@ async def search_by_sector(
             )
         elif source == "ted":
             total, notices = await search_ted(
-                cpv_prefix=primary_cpv, limit=per_page, page=page, only_active=only_active, country=country
+                cpv_prefixes=cpv_prefixes, limit=per_page, page=page, only_active=only_active, country=country
             )
         else:
             half = per_page // 2
             boamp_task = search_boamp(cpv_prefix=primary_cpv, limit=half, offset=0, only_active=only_active)
             ted_task = search_ted(
-                cpv_prefix=primary_cpv, limit=half, page=1, only_active=only_active, country=country
+                cpv_prefixes=cpv_prefixes, limit=half, page=1, only_active=only_active, country=country
             )
             (bt, bn), (tt, tn) = await asyncio.gather(boamp_task, ted_task)
             notices = bn + tn
